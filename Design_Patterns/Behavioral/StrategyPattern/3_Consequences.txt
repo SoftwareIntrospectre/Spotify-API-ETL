@@ -1,0 +1,14 @@
+(pg 317-318)
+
+1. Families of related algorithms
+2. An alternative to subclassing
+3. Strategies eliminate conditional statements
+4. A choice of implementations
+    * Potential drawback
+        - Use only wnen the variation in behavior is relevant to Clients
+
+5. Clients must be aware of different Strategies
+6. Communication overhead between Strategy and Context
+7. Increased number of objects
+    - Can potentially reduce this overhead by implementing Strategies as stateless objects (FP?)
+

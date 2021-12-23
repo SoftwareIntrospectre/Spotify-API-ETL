@@ -1,0 +1,12 @@
+* Strategy (Compositor)
+    - declares an interface common to all supported algorithms.
+        -- Context uses this interface to call the algorithm defined by a ConcreteStrategy
+
+* ConcreteStrategy (SimpleCOmpositor, TexCompositor, ArrayCompositor)
+    - implements the algorithm using the Strategy interface
+
+
+* Context (Composition)
+    - is configured with a ConcreteStrategy object
+    - maintains a reference to Strategy object
+    - may define an interface that lets Strategy access its data

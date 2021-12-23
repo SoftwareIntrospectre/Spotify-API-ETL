@@ -1,0 +1,39 @@
+Intent: 
+* Define a family of algorithms, encapsulate each one, and make them interchangable. 
+* Strategy lets the algorithm vary independently from clients that use it.
+
+Movivation:
+    * Many algorithms exist for breaking a stream of text into lines. 
+      Hard-writing all such algorithms into the classes that require them isn't desirable 
+      for several reasons:
+
+        1. Clients that need linebreaking get more complex if they include the line-breaking code.
+            -That makes clients bigger and harder to maintain
+                --especially if they support multiple linebreaking algorithms
+
+        2. Different algorithms will be appropriate at different times.
+            --We don't want to support multiple linebreaking algorithms if we don't use them all.
+
+
+        3. It's difficult to add new algorithms and vary existing ones when linebreaking is an integral part of a clients
+
+"We can avoid these problems by defining classes that encapsulate different line-breaking algorithms.
+ An algorithm that's encapsulated in this way is called a strategy."
+
+
+Use the Strategy pattern when:
+
+    * many related classes differ only in their behavior. STrategies proide a way to configure a class with one of many behaviors.
+
+    * You need different variatns of an algorithm
+        - Example: You might define algorithms reflecting different space/time trade-offs. 
+            -- Strategies can be used when these variants are implemented as a class hierarchy of algorithms
+
+
+    * An algorithm uses data that clients shouldn't know about. 
+        - Use the Strategy pattern to avoid exposing complex, algorithm-specfic data structures
+
+
+    * A class defines many behaviors, and these appear as multiple conditional statements in its operations
+        - Instead of many conditionals, move related conditional branches into their own Strategy class
+
