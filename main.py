@@ -200,10 +200,9 @@ def establish_sql_server_connection(dataframe_for_sql, server_name, database_nam
 
     return True
 
-
 if __name__ == "__main__":
 
-    oauth_token = 'BQBDYnn0S5Y8RxI6OLyeDCZkTAznejuCUkxGayji7Y6en7Lh0XfJ_o1TMPL-q8hYfN1QCij9qSz298uRUdEjMrJDqfzKX3kHZTVSwC_HIGCOA_RrjsFcIH4XKaR8-HxTu1bnCIdn2UiGMBXigCKqpFA_7a9nAE9CeihQV5zA' #get_user_recently_played_tracks_current_oauth_token()
+    oauth_token = os.environ.get('SPOTIFY_OAUTH_TOKEN_ENV')
 
     # filling in the contents of Spotify API's curl GET request with required fields
     # below the "Try It" button:
