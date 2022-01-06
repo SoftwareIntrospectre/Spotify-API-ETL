@@ -1,191 +1,101 @@
 '''
-    ETL Program is used to pull played songs data from Spotify API (Extract), validate in Python (Transform), and upload into a SQL Table (Load)
+    Intention: 
+    
+    1. To use my Spotify credentials to connect to Spotify API using the Client Credentials Flow (Authorization: OAuth2) 
 
-        ToDo (11/12/2021):
+    2. Obtain my Recently Played Songs Data (equivalent to: song name, musician name, played at (datetime), datetime_timestamp) from the past 24 hours
 
-            Python
-                Programmatically grab the API Token, to avoid "expired token" errors
-                    https://towardsdatascience.com/how-to-pull-data-from-an-api-using-python-requests-edcc8d6441b1
-                    
-                obfuscate UserID and API Token
+    3. Transform the imported data into a tabular format so that it can be export to Microsoft SQL Server
 
-            SQL
-                Determine additional columns
-                Enforce datatypes for table
-                Create Surrogate Key: Song_Timestamp_Key for TimeStamp Natural Key
-                Ensure Surrogate Key is PK in SSMS
-                
-                Design Schema (Dimension Tables, Fact Tables)
+    4. Import data into Microsoft SQL Server --> KATSUKI Server --> [API_Testing].[dbo].[Spotify_Data_Load] table
+
+    5. Upon import: Generate a primary key for each record (Song_Played_SKey), using the played_at_datetime field
+        Why: Only 1 song can be played at any given moment in time, making it a good candidate
+
+    6. Have the process automatically occur each day
+        6A. Create an SSIS package with the "Execute Script" task
+
+    X. If there's no songs played within past 24 hours, have that be an acceptable case (create a log file for this.)
+            *consider what type of logging information would be useful
+                * Log each major step. If failure, log exact failure. 
+                * If no records for that day, log that case
+
+Why:
+    1. Demonstrate ability to grab data via an API via Python
+    2. Ability to handle edge cases in script
+    3. Demonstrate logging
+    4. Experience creating an SSIS package with Python script
+    5. Experience maintaining a regularly recurring ETL independently
+    6. Experience creating and maintaining data in Dimension Table
+
+Example:
+    Song_Name	Musician_Name	Played_At_Datetime	        Date_Timestamp	        Song_Played_SKey (PK)
+    The Castle	Nobuo Uematsu	2021-12-08T16:12:57.797Z	2021-12-08	            1
 '''
 
-# used for Data Frame functionality (tabular data for easier loading)
-import pandas as pd
+# used to access environment variables
+import os
 
-# create database enging connection
-from sqlalchemy import create_engine
+# used to encode CLIENT_ID and CLIENT_SECRET into byte-encoded string for authentication
+import base64
+
+# used to make an HTTP request to Spotify's server
+import requests
+
+# used to create timestamps for data load from API call (within past 24 hours)
+import datetime
+
+# used to convert JSON data into tabular format (dataframe) for SQL Server exporting
+import pandas as pd
 
 # used to open URL for SQL Server server connection
 import urllib
 
-# used for Spotify API requests
-import requests
+# create database enging connection
+from sqlalchemy import create_engine
 
-# import pip._vendor.requests
+import spotipy
 
-# used to convert Unix timestamps into datetime format
-from datetime import datetime
+import json
 
-import os
+# # validation checks
+# def check_if_valid_data(df: pd.DataFrame) -> bool:
 
-import base64
+#     print(df)
 
-import datetime
+#     #check if dataframe is empty
+#     if df.empty:
+#         print("No songs played.")
+#         return False
 
-# used to make selection from limited options (polymorphic behavior)
-from enum import Enum
+#     # Primary Key (PK) check: played at is PK because it's a unique timestamp (enforces Primary Key Constraint)
+#     if pd.Series(df['Played_At_Datetime']).is_unique:
+#         pass
 
-# import spotipy
-# from spotipy.oauth2 import SpotifyClientCredentials
+#     else:
+#         raise Exception("Primary Key check is violated.")
 
-def authenticate():
+#     # Null values check
+#     if df.isnull().values.any():
+#         raise Exception("Null values found.")
+
+def generate_log_table_dataframe():
     '''
-        What: Grab the values of environment variables and place them into a dictionary .
-        Why: This creates a convenient container for authorization without duplicate logic.
+        Collect logging data, convert to dataframe, push to table
     '''
-    CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID_ENV')
+    return None
 
-    CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET_ENV')
+def generate_main_table_dataframe():
+    '''
+        Take API data, convert to dataframe, push to table
+    '''
+    return None
 
-    SPOTIFY_USER_ID = os.environ.get('SPOTIFY_USER_ID_ENV')
-
-    SPOTIFY_URI = 'https://api.spotify.com/v1/me/player/recently-played' #os.environ.get('SPOTIFY_URI')
-
-    encodedData = base64.b64encode(bytes(f"{argument1}:{argument2}", "ISO-8859-1")).decode("ascii")
-    BASE64_ENCODED = f"{encodedData}"
-
-    spotify_scopes = 'user-read-recently-played'
-
-    # authenticate
-   # sp_oauth = oauth2.SpotifyOauth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, uri=SPOTIFY_URI, scopes=spotify_scopes)
-    # token_info = sp_oauth.get_cached_token()
-
-    # if not token_info:
-    #     auth_url = sp_oauth.get_authorize_url(show_dialogue=True)
-    #     print(auth_url)
-    #     response=input('Paste the above link into your browser, then paste the redirect url here: ')
-
-    #     code = sp_oauth.parse_response_code(response)
-    #     token_info = sp_oauth.get_access_token(code)
-
-    #     token = token_info['access_token']
-
-    # sp = spotipy.Spotify(auth=token)
-    # print(sp)
-   
-       # Authorization Code Flow docs: https://developer.spotify.com/documentation/general/guides/authorization/code-flow/
-    # Scope docs: https://developer.spotify.com/documentation/general/guides/authorization/scopes/#user-read-recently-played
-    get_request_query = "https://accounts.spotify.com/client_id=" + CLIENT_ID, "&","response_type=code&redirect_uri=" + SPOTIFY_URI, "&scope=user-read-recently-played"
-    print(get_request_query)
+def load_dataframe_to_database(dataframe_for_sql, server_name, database_name):
+    '''
+        load dataframe to database
+    '''
     
-    '''
-        Why: The token will expire on a timer, and automating this is mandatory for automated ETL jobs.
-    '''
-    result = ""
-
-    response = requests.post(
-    data={"grant type": "authorization_code",
-    "refresh_token":  get_request_query},
-    headers={"Authorization": "Basic " + response })
-
-    result = response.json()
-
-    # invalid result returns a dictionary with error messages instead of a token
-    if result is not str(type):
-        #raise Exception("Did not successfully refresh token. Result is: " + str(result))
-        return None
-    else:
-        return result    
-
-
-# get_refreshed_json_token()
-
-# print(result)
-
-
-# obtained from Spotify for Developers "Request Token" field
-# Token expires after a set period of time. Generate new token as needed.
-# URL:    https://developer.spotify.com/console/get-recently-played/?limit=10&after=1636380337&before=
-
-# make sure to click the Relevant Scopes' checkbox, otherwise {'error': {'status': 403, 'message': 'Insufficient client scope'}}
-
-# validation checks
-def check_if_valid_data(df: pd.DataFrame) -> bool:
-
-    print(df)
-
-    #check if dataframe is empty
-    if df.empty:
-        print("No songs played.")
-        return False
-
-    # Primary Key (PK) check: played at is PK because it's a unique timestamp (enforces Primary Key Constraint)
-    if pd.Series(df['Played_At_Datetime']).is_unique:
-        pass
-
-    else:
-        raise Exception("Primary Key check is violated.")
-
-    # Null values check
-    if df.isnull().values.any():
-        raise Exception("Null values found.")
-
-# intended: Check that all timestamps are of yesterday's date
-    yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
-    yesterday = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
-
-# testing: Check that all timestamps are of yesterday's date
-#     three_days_ago = datetime.datetime.now() - datetime.timedelta(days=3)
-#     three_days_ago = three_days_ago.replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-# comment out if you don't care about the past 24 hours thing
-
-    # timestamps = df["Date_Timestamp"].tolist()
-    
-    # for timestamp in timestamps:
-
-    #     #strptime creates a datetime object from a given string
-    #     if datetime.datetime.strptime(timestamp, "%Y-%m-%d") != yesterday:
-    #        raise Exception("At least one of the returned songs does not come from within the last 24 hours.")
-
-    #     # testing: 3 days ago
-    #     # if datetime.datetime.strptime(timestamp, "%Y-%m-%d") < three_days_ago:
-    #     #     raise Exception("At least one of the returned songs does not come from within the last 72 hours.")
-
-    #return True
-
-
-
-# def get_user_recently_played_tracks_current_oauth_token() -> str:
-#     '''
-#         Function that validates the API token. If not current, request current token and store in environment variable.
-#         Use current version of OAuth Token for authentication
-#     '''
-#     try:
-#         oauth_token = env_secrets.SPOTIFY_USER_RECENTLY_PLAYED_TRACKS_TOKEN
-#         return oauth_token
-
-#     except:
-#         print('Token is not valid. Please refresh the OAuth token.')
-#         return None
-
-def set_is_unique() -> bool:
-
-    return True
-
-
-def establish_sql_server_connection(dataframe_for_sql, server_name, database_name):
-
     quoted = urllib.parse.quote_plus("Driver={SQL Server};"
                                     "Server=" + server_name + ";" +
                                     "Database=" + database_name +";")
@@ -200,54 +110,86 @@ def establish_sql_server_connection(dataframe_for_sql, server_name, database_nam
 
     return True
 
-if __name__ == "__main__":
 
-    oauth_token = os.environ.get('SPOTIFY_OAUTH_TOKEN_ENV')
+def process_data():
+        #https://developer.spotify.com/console/get-recently-played/?limit=10&after=1636229680000&before=
+    '''
+        API Reference: Get Recently Played Tracks
+        Endpoint: https://api.spotify.com/v1/me/player/recently-played
+        HTTP Method: GET
+        OAuth: Required
 
-    # filling in the contents of Spotify API's curl GET request with required fields
-    # below the "Try It" button:
-    # https://developer.spotify.com/console/get-recently-played/?limit=10&after=1636380337&before=
-    
-    spotify_API_headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {token}".format(token=oauth_token)
-    }
+        GET https://api.spotify.com/v1/me/player/recently-played
+        limit = 50 (maximum)
+        after 1636229680000 (yesterday_unix_timestamp)
 
+        OAuth Token: GetToken --> Required scopes for this endpoint: user-read-recently-played
+
+    '''
     today = datetime.datetime.now()
 
-    # want to grab data from last 24 hours
-
-# intended: yesterday's data (no results 11/9/2021)
-    yesterday = today - datetime.timedelta(days=1) #days=1
-
-# testing for 3 days ago worth of data
-    # three_days_ago = today -datetime.timedelta(days=3)
-
-    # maths: millisecond * 1000 = 1 second
-
-# intended: yesterday's data (no results 11/9/2021)
+    # grab data from last 24 hours
+    yesterday = today - datetime.timedelta(days=60)  #days=1
     yesterday_unix_timestamp = int(yesterday.timestamp()) * 1000
 
-# testing for 3 days ago worth of data
-    #three_days_ago_unix_timestamp = int(three_days_ago.timestamp()) * 1000
+    yesterday_unix_timestamp_string = str(yesterday_unix_timestamp)
 
-    # found from first header in curl GET request, using dynamic time instead of hard-coded value
+    CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID_ENV')
+    CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET_ENV')
+    BASE64_ENCODED_HEADER_STRING = base64.b64encode(bytes(f"{CLIENT_ID}:{CLIENT_SECRET}", "ISO-8859-1")).decode("ascii")
+    #must be between 1 and 50
+    song_limit_amount= 1
+    song_limit_amount_string = str(song_limit_amount)
+
+    token_request_url = "https://accounts.spotify.com/api/token"
+    headers = {}
+    data = {}
+
+    api_call_url = f"https://api.spotify.com/v1/me/player/recently-played?limit={song_limit_amount_string}&after={yesterday_unix_timestamp_string}"
+
+    print("api_call_url: ", api_call_url)
+
+    headers['Authorization'] = f"Basic {BASE64_ENCODED_HEADER_STRING}"
+    data['grant_type'] = "client_credentials"
+    data['scope'] = 'user-read-recently-played'
+
+    # make API request to request OAuth Token
+    r = requests.post(token_request_url, headers=headers, data=data)
+    token = r.json()['access_token']
+
+    print("OAuth Token is: ", token)
+
+    # use token to access data
+    headers = {
+        "Authorization": "Bearer " + token
+    }
+
+    res = requests.get(url=api_call_url, headers=headers)
+    print(json.dumps(res.json(), indent=2))
+
+#curl -X "GET" "https://api.spotify.com/v1/me/player/recently-played?limit=50&after=1636229680000" -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer BQAiTwBR21RFKg-MJM4onyICyeTUH-Nftg4p9a-9m4gFxGjnLIXg5GuZQ4OHy9PxkwlXOM1uL58D5fCkAKfe0Z3hMw79rKolf8BM7F3HQ7NH_s8ZTTYDHd136IxqISvOlJDPvY8weTCmY8ivBahdQVtqDZz77_DCSNgUx4I0"
+
+    # spotify_API_headers = {
+    #     "Accept": "application/json",
+    #     "Content-Type": "application/json",
+    #     "Authorization": "Bearer {token}".format(token=oauth_token)
+    # }
 
 # intended: yesterday's data (no results 11/9/2021)
-    http_response= requests.get("https://api.spotify.com/v1/me/player/recently-played?limit=10&after={time}".format(time=yesterday_unix_timestamp), headers = spotify_API_headers)
+    
+    # http_response= requests.get("https://api.spotify.com/v1/me/player/recently-played?limit=10&after={time}".format(time=yesterday_unix_timestamp), headers = BASE64_ENCODED_HEADER_STRING)
 
 # testing for 3 days ago worth of data
     #http_response = requests.get("https://api.spotify.com/v1/me/player/recently-played?limit=10&after={time}".format(time=three_days_ago_unix_timestamp), headers = spotify_API_headers)
 
-    data = http_response.json()
+    # data = http_response.json()
 
-    print(data)
+    # print(data)
 
     #print(data)
 
     # the only field names I care about
-
+'''
     song_names = []
     artist_names = []
     played_at_list = []
@@ -288,13 +230,15 @@ if __name__ == "__main__":
 
         # used to prepare pandas dataframe (tabular formatted data)
 
-
     # Validate
     if check_if_valid_data(song_dataframe) is not False:
         print("Data valid, proceed to Load stage.")
 
         # Load
-        establish_sql_server_connection(song_dataframe, 'KATSUKI', 'API_TESTING')
+        load_dataframe_to_database(song_dataframe, 'KATSUKI', 'API_TESTING')
 
     else:
         print("Nothing to load. Exiting.")
+'''
+
+process_data()
