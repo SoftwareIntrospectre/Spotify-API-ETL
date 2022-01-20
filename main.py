@@ -1,36 +1,21 @@
 '''
-    Intention: 
-    
-    1. To use my Spotify credentials to connect to Spotify API using the Client Credentials Flow (Authorization: OAuth2) 
+    What I learned:
+        - Have a robust yet agile plan in place first
+        - Research how often the API is maintained, to prevent getting stuck halfway through the project
+            - If there's lots of bugs on the forums, then maybe don't go with that one.
+'''
+'''
+    Plan:
 
-    2. Obtain my Recently Played Songs Data (equivalent to: song name, musician name, played at (datetime), datetime_timestamp) from the past 24 hours
-
-    3. Transform the imported data into a tabular format so that it can be export to Microsoft SQL Server
-
-    4. Import data into Microsoft SQL Server --> KATSUKI Server --> [API_Testing].[dbo].[Spotify_Data_Load] table
-
-    5. Upon import: Generate a primary key for each record (Song_Played_SKey), using the played_at_datetime field
-        Why: Only 1 song can be played at any given moment in time, making it a good candidate
-
-    6. Have the process automatically occur each day
-        6A. Create an SSIS package with the "Execute Script" task
-
-    X. If there's no songs played within past 24 hours, have that be an acceptable case (create a log file for this.)
-            *consider what type of logging information would be useful
-                * Log each major step. If failure, log exact failure. 
-                * If no records for that day, log that case
-
-Why:
-    1. Demonstrate ability to grab data via an API via Python
-    2. Ability to handle edge cases in script
-    3. Demonstrate logging
-    4. Experience creating an SSIS package with Python script
-    5. Experience maintaining a regularly recurring ETL independently
-    6. Experience creating and maintaining data in Dimension Table
-
-Example:
-    Song_Name	Musician_Name	Played_At_Datetime	        Date_Timestamp	        Song_Played_SKey (PK)
-    The Castle	Nobuo Uematsu	2021-12-08T16:12:57.797Z	2021-12-08	            1
+    def process_data()
+        1. Define and import ENVIRONMENT_VARIABLES to access my Spotify account
+        2. Encode CLIENT_ID and CLIENT_SECRET into an encoded byte string, then decode into string (for authorization header)
+        3. Define the API endpoint (specific song data I'm looking for)
+        4. Define headers and data dictionaries, to contain headers and data lists
+        5. Define grant type as "client_credentials", because I only care about server connection (no app/client required here)
+        6. Make an HTTP POST request to spotify, requesting the OAuth Token (use the provided Token URL)
+        7. Store the response JSON object into a variable
+        8. 
 '''
 
 # used to access environment variables
@@ -134,38 +119,91 @@ def process_data():
 
     yesterday_unix_timestamp_string = str(yesterday_unix_timestamp)
 
+    print ('Yesterday Unix Timestamp: ', yesterday_unix_timestamp_string)
+
     CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID_ENV')
     CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET_ENV')
     BASE64_ENCODED_HEADER_STRING = base64.b64encode(bytes(f"{CLIENT_ID}:{CLIENT_SECRET}", "ISO-8859-1")).decode("ascii")
     #must be between 1 and 50
-    song_limit_amount= 1
+    song_limit_amount= 2
     song_limit_amount_string = str(song_limit_amount)
 
+    offset_amount = 5
+    offset_amount_string = str(offset_amount)
+
+    print("Song limit amount: ", song_limit_amount_string)
+
+    print('Limit: ' + song_limit_amount_string)
+
     token_request_url = "https://accounts.spotify.com/api/token"
-    headers = {}
-    data = {}
 
-    api_call_url = f"https://api.spotify.com/v1/me/player/recently-played?limit={song_limit_amount_string}&after={yesterday_unix_timestamp_string}"
+    headers_dict = {}
+    data_dict = {}
 
-    print("api_call_url: ", api_call_url)
+    # HTTP GET request returned Status 500, so bug on Spotify's end. Pivoting to other data (1/19/2022)
+    # get_request_api_endpoint = f"https://api.spotify.com/v1/me/player/recently-played?limit={song_limit_amount_string}&after={yesterday_unix_timestamp_string}"
+    get_request_api_endpoint = f"https://api.spotify.com/v1/users/gw4ojoz76rzzmzy1gchctig37/playlists?offset={offset_amount_string}&limit={song_limit_amount_string}"
 
-    headers['Authorization'] = f"Basic {BASE64_ENCODED_HEADER_STRING}"
-    data['grant_type'] = "client_credentials"
-    data['scope'] = 'user-read-recently-played'
+
+    print("get_request_api_endpoint: ", get_request_api_endpoint)
+
+    headers_dict['Authorization'] = f"Basic {BASE64_ENCODED_HEADER_STRING}"
+    data_dict['grant_type'] = "client_credentials"
+    data_dict['json'] = True
+
+    #multiple scopes requrire a space in the same string
+    # data_dict['scope'] = 'user-read-recently-played'
+    data_dict['scope'] = 'playlist-read-private'
 
     # make API request to request OAuth Token
-    r = requests.post(token_request_url, headers=headers, data=data)
-    token = r.json()['access_token']
+    r = requests.post(token_request_url, data=data_dict, headers=headers_dict)
 
-    print("OAuth Token is: ", token)
+    token = r.json()['access_token']
+    print("Token: " + token)
+
+    # prints the response from the server regarding the access token data
+    print(json.dumps(r.json(), indent=2))    
 
     # use token to access data
-    headers = {
+    get_request_headers = {
+        "Accept": "application/json",
+        "Content-Type": 'application/json', #"application/json",
         "Authorization": "Bearer " + token
     }
 
-    res = requests.get(url=api_call_url, headers=headers)
-    print(json.dumps(res.json(), indent=2))
+
+    # Need to fix how I use the Access Token
+
+
+    res = requests.get(url=get_request_api_endpoint, headers=get_request_headers)
+    
+    # recently_played_songs_object = (json.dumps(res.json(), indent=2))
+    
+    data = (json.dumps(res.json(), indent=2))
+
+    print(data)
+
+    '''
+    Thursday 1/20/2022 TODO:
+        - Proved that "Recently Played Tracks" endpoint is buggy (Code: 500 - Server Error)
+        - Experimented with the "Get User Playlists" endpoint, proved that endpoint is working successfully.
+    '''
+
+    '''
+        Friday 1/21/2022 TODO:
+            1. Investigate Spotify's API endpoints to use
+            2. Think through which endpoints could be useful
+            3. Narrow useful endpoints down to 1
+            4. Rework code to use that endpoint
+            5. Create SSIS Package to call Python script
+            6. Create scheduled job in SSMS
+            7. Set the job to run daily
+            8. Check on it Monday 
+    '''
+
+    # Bug: https://community.spotify.com/t5/Spotify-for-Developers/Bug-with-an-API-Recently-Played-Tracks/td-p/5065969
+
+    #print(json.dumps(res.json(), indent=2))
 
 #curl -X "GET" "https://api.spotify.com/v1/me/player/recently-played?limit=50&after=1636229680000" -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer BQAiTwBR21RFKg-MJM4onyICyeTUH-Nftg4p9a-9m4gFxGjnLIXg5GuZQ4OHy9PxkwlXOM1uL58D5fCkAKfe0Z3hMw79rKolf8BM7F3HQ7NH_s8ZTTYDHd136IxqISvOlJDPvY8weTCmY8ivBahdQVtqDZz77_DCSNgUx4I0"
 
@@ -187,58 +225,58 @@ def process_data():
     # print(data)
 
     #print(data)
-
-    # the only field names I care about
 '''
+    # the only field names I care about
     song_names = []
     artist_names = []
-    played_at_list = []
+    song_added_at_playlist = []
     timestamps = []
-
-    print(data)
 
     song_dataframe = pd.DataFrame()
 
+    # print(song_dataframe)
+
     # attempt to append data from API to a dictionary, then to a dataframe
-    try:
+    # try:
 
         # grabbing elements from data's item list (master results)
-        for song in data["items"]:
+    for song in data["items"]:
 
-            # iterating to inner list: names and adding individual name per song
-            song_names.append(song["track"]["name"])
+        # iterating to inner list: names and adding individual name per song
+        song_names.append(song["track"]["name"])
 
-            # iterating to individual inner inner list: artists and adding individual artist per son
-            artist_names.append(song["track"]["album"]["artists"][0]["name"])
+        # iterating to individual inner inner list: artists and adding individual artist per son
+        artist_names.append(song["track"]["album"]["artists"][0]["name"])
 
-            played_at_list.append(song["played_at"])
+        song_added_at_playlist.append(song["added_at"])
 
-            timestamps.append(song["played_at"][0:10])
+        timestamps.append(song["added_at"][0:10])
 
-        song_dictionary = {
-            "Song_Name": song_names,
-            "Musician_Name": artist_names,
-            "Played_At_Datetime": played_at_list,
-            "Date_Timestamp": timestamps
-        }
+    song_dictionary = {
+        "Song_Name": song_names,
+        "Musician_Name": artist_names,
+        "Song_Added_At_Datetime": song_added_at_playlist,
+        "Date_Timestamp": timestamps
+    }
 
-        song_dataframe = pd.DataFrame(data=song_dictionary, index=False, columns=["Song_Name", "Musician_Name", "Played_At_Datetime", "Date_Timestamp"])
+    song_dataframe = pd.DataFrame(data=song_dictionary, index=False, columns=["Song_Name", "Musician_Name", "Played_At_Datetime", "Date_Timestamp"])
 
-    # Fails if Token is expired
-    except:
-        print("Token expired. Get a new one.")
+    print(song_dataframe)
 
-        # used to prepare pandas dataframe (tabular formatted data)
+    # # Fails if Token is expired
+    # except:
+    #     print("Token expired. Get a new one.")
 
-    # Validate
-    if check_if_valid_data(song_dataframe) is not False:
-        print("Data valid, proceed to Load stage.")
+    #     # used to prepare pandas dataframe (tabular formatted data)
 
-        # Load
-        load_dataframe_to_database(song_dataframe, 'KATSUKI', 'API_TESTING')
+    # # Validate
+    # if check_if_valid_data(song_dataframe) is not False:
+    #     print("Data valid, proceed to Load stage.")
 
-    else:
-        print("Nothing to load. Exiting.")
+    #     # Load
+    #     load_dataframe_to_database(song_dataframe, 'KATSUKI', 'API_TESTING')
+
+    # else:
+    #     print("Nothing to load. Exiting.")
 '''
-
 process_data()
