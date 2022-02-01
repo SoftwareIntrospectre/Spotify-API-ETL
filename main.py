@@ -116,7 +116,7 @@ def process_data():
     CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET_ENV')
     BASE64_ENCODED_HEADER_STRING = base64.b64encode(bytes(f"{CLIENT_ID}:{CLIENT_SECRET}", "ISO-8859-1")).decode("ascii")
     #must be between 1 and 50
-    song_limit_amount= 10
+    song_limit_amount= 50
     song_limit_amount_string = str(song_limit_amount)
 
     print('Limit: ' + song_limit_amount_string)
@@ -126,7 +126,7 @@ def process_data():
     data = {}
 
     #api_call_url = f"https://api.spotify.com/v1/me/player/recently-played?limit={song_limit_amount_string}&after={yesterday_unix_timestamp_string}"
-    api_endpoint_url  = "https://api.spotify.com/v1/browse/new-releases?country=US&limit=10&offset=5"
+    api_endpoint_url  = "https://api.spotify.com/v1/browse/new-releases?country=US&limit=50&offset=0"
     print("api_call_url: ", api_endpoint_url)
 
     headers['Authorization'] = f"Basic {BASE64_ENCODED_HEADER_STRING}"
@@ -178,7 +178,7 @@ def process_data():
 
     #print(data)
 
-    output_dataframe = pd.DataFrame()
+    # output_dataframe = pd.DataFrame()
 
 # the only field names I care about
     album_ids_list = [] #"id": "0sb3OPjnOZEgWrAhwSyGJc"
@@ -275,22 +275,24 @@ def process_data():
         }
 
         album_dataframe = pd.DataFrame(dataframe_columns) 
-        print("Album Dataframe: ",album_dataframe)
+        print("Album Dataframe: ", album_dataframe)
+
+    album_dataframe = album_dataframe.drop_duplicates()
         
 
-        # concatenates each album's dataframe to the output dataframe
-        print("Appending current dataframe to Output Dataframe")
-        output_dataframe = output_dataframe.append(album_dataframe)
+    #     # concatenates each album's dataframe to the output dataframe
+    #     print("Appending current dataframe to Output Dataframe")
+    #     output_dataframe = output_dataframe.append(album_dataframe)
 
-        print(output_dataframe)
-    #     return
+    #     print(output_dataframe)
+    # #     return
 
-        output_dataframe = output_dataframe.drop_duplicates()
+    #     output_dataframe = output_dataframe.drop_duplicates()
 
-        print(output_dataframe)
+    #     print(output_dataframe)
 
     print('Finished iterating through JSON data. Moving to SQL Load.')
-    load_dataframe_to_database(output_dataframe, 'KATSUKI', 'API_TESTING', 'dbo', 'Spotify_Top_Ten_New_Releases') 
+    load_dataframe_to_database(album_dataframe, 'KATSUKI', 'API_TESTING', 'dbo', 'Spotify_Top_Ten_New_Releases') 
     
     #TODO: Fix the issue loading this into SQL: "(pyodbc.Programming Error"
         # Exception has occurred: ProgrammingError
