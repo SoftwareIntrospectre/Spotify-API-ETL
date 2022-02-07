@@ -19,50 +19,8 @@
 		GO
 	*/
 
-
---SELECT * FROM  [dbo].[Spotify_API_ETL_SQL_LandingZone] AS A
-
-
---CREATE PROCEDURE [dbo].[Spotify_API_ETL__Remove_Duplicates] AS
-
-----find all duplicate records and delete them from table
---; WITH DUPLICATES_CTE AS
---(
---	SELECT
---	  B.Album_ID
---	, B.Album_Release_Date
---	, B.RECORD_COUNT
-
---	FROM
---	(
---		SELECT 
---		  A.Album_ID
---		, A.Album_Release_Date
---		, ROW_NUMBER() OVER (PARTITION BY Album_ID ORDER BY Album_ID, Album_Release_Date) AS 'RECORD_COUNT'
-
---		FROM [dbo].[Spotify_API_ETL_SQL_LandingZone] AS A
---	) AS B
-
---	WHERE B.RECORD_COUNT > 1
---) 
-
-----SELECT * FROM [dbo].[Spotify_API_ETL_SQL_LandingZone]
-
---DELETE FROM  [dbo].[Spotify_API_ETL_SQL_LandingZone]
-
---WHERE Album_ID IN
---(
---	SELECT C.Album_ID
-
---	FROM [dbo].[Spotify_API_ETL_SQL_LandingZone] AS C
-
---	INNER JOIN DUPLICATES_CTE AS D
---	ON C.Album_ID = D.Album_ID
---	AND C.Album_Release_Date = D.Album_Release_Date
---)
----------------------------------------------------------------------------------------------------------------------------
-
---CREATE PROCEDURE [dbo].[Spotify_API_ETL__Populate_Warehouse_Table] AS
+------------------------------------------------------------------------------------------------
+--ALTER PROCEDURE [dbo].[Spotify_API_ETL__Populate_Warehouse_Table_With_Unique_Records] AS
 
 --CREATE TABLE [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
 --(
@@ -73,11 +31,11 @@
 --	, Release_Date DATE NOT NULL
 --	, Release_Date_Precision VARCHAR(6)
 --	, Total_Tracks INT NOT NULL
---	, Spotify_URL VARCHAR(MAX)
+--	, Spotify_URL VARCHAR(MAX) NULL
+--	, Record_Count INT 
 
 --	  CONSTRAINT PK_Album_SKey PRIMARY KEY CLUSTERED (Album_SKey)
 --)
-
 
 --INSERT INTO [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
 --(
@@ -90,34 +48,106 @@
 --	, [Spotify_URL]
 --)
 
---SELECT *
+--SELECT DISTINCT
+--  [Album_ID]
+--, [Album_Type]
+--, [Album_Name]
+--, CAST([Album_Release_Date] AS DATE) AS [Album_Release_Date]
+--, [Album_Release_Date_Precision]
+--, [Album_Total_Tracks]
+--, [Album_Spotify_URL]
 
---FROM
---(
---	SELECT DISTINCT 
---	  [Album_ID]
---	, [Album_Type]
---	, [Album_Name]
---	, CAST([Album_Release_Date] AS DATE) AS [Album_Release_Date]
---	, [Album_Release_Date_Precision]
---	, [Album_Total_Tracks]
---	, [Album_Spotify_URL]
+--FROM [dbo].[Spotify_API_ETL_SQL_LandingZone]
 
---	FROM [API_Testing].[dbo].[Spotify_API_ETL_SQL_LandingZone]
---) AS SUB
-
---ORDER BY SUB.Album_Release_Date DESC, SUB.Album_Name
+--TRUNCATE TABLE [dbo].[Spotify_API_ETL_SQL_LandingZone]
+--UPDATE STATISTICS [dbo].[Spotify_API_ETL_SQL_LandingZone]
 
 ------------------------------------------------------------------------------------------------
+
+
+
+--TRUNCATE TABLE [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+
+/*
+	SELECT
+	  A.Album_ID_NatKey
+	, A.Release_Date
+	, count(*) AS 'ALBUM_COUNT'
+	FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable] AS A
+
+	GROUP BY   
+	  A.Album_ID_NatKey
+	, A.Release_Date
+*/
+
+
+--CREATE PROCEDURE [dbo].[Spotify_API_ETL__Deduplicate_Warehouse_Table] AS
+
+-------------------------------------------------------------------------------
+
+SELECT *
+
+INTO #temp
+
+FROM
+(
+	SELECT 
+	 count(*) as 'RECORD_COUNT'
+	, Album_ID_NatKey
+	, Album_Type	
+	, Album_Name	
+	,Release_Date	
+	, Release_Date_Precision	
+	, Total_Tracks	
+	, Spotify_URL
+
+	FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+
+	GROUP BY 
+	  Album_ID_NatKey
+	, Album_Type	
+	, Album_Name	
+	,Release_Date	
+	, Release_Date_Precision	
+	, Total_Tracks	
+	, Spotify_URL
+
+) AS DERIVED
+
+DELETE FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+WHERE Album_SKey NOT IN
+(
+	SELECT W.Album_SKey
+
+	FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable] AS W
+
+	JOIN #temp AS D
+	ON W.Album_ID_NatKey = D.Album_ID_NatKey
+	AND D.RECORD_COUNT = 1
+)
+
 USE API_Testing
 GO
 
-EXEC [dbo].[Spotify_API_ETL__Remove_Duplicates] 
-GO
-
-EXEC [dbo].[Spotify_API_ETL__Populate_Warehouse_Table] 
-GO
+SELECT *  FROM [dbo].[Spotify_API_ETL_SQL_LandingZone]
 
 SELECT * FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+ORDER BY Album_ID_NatKey
 
---TRUNCATE TABLE [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+-------------------------------------------------------------------------------
+
+--EXEC [dbo].[Spotify_API_ETL__Populate_Warehouse_Table_With_Unique_Records] 
+--GO
+
+--EXEC [dbo].[Spotify_API_ETL__Deduplicate_Warehouse_Table] 
+--GO
+
+-------------------------------------------------------------------------------
+
+SELECT *  FROM [dbo].[Spotify_API_ETL_SQL_LandingZone]
+
+SELECT * FROM [dbo].[Spotify_API_ETL__New_Releases_WarehouseTable]
+ORDER BY Album_SKey
+
+
+
